@@ -1,0 +1,98 @@
+---
+#
+# Copyright 2014 Major Hayden
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+
+  - name: Upgrade all packages
+    yum: >
+      name=*
+      state=latest
+
+  - name: Enable SELinux
+    selinux: >
+      policy=targeted
+      state=enforcing
+
+  - name: Install libvirt/LXC packages
+    yum: >
+      name={{ item }}
+      state=present
+    with_items: lxc_packages
+
+  - name: Start libvirtd and related services
+    service: >
+      name={{ item }}
+      state=started
+      enabled=yes
+    with_items:
+      - libvirt-guests
+      - libvirtd
+
+  - name: Create directory for Fedora 21 cloud image chroot
+    file: >
+      path=/var/lib/libvirt/filesystems/fedora21
+      state=directory
+
+  - name: Make Fedora 21 cloud image chroot (may take a while)
+    shell: yum -y --installroot=/var/lib/libvirt/filesystems/fedora21 --releasever=21 install systemd passwd yum fedora-release vim-minimal openssh-server procps-ng iproute net-tools dhclient
+
+  - name: Checking to see if our container is registered from a previous ansible run
+    shell: virsh list --all | grep fedora21
+    register: virsh_output_prev
+    ignore_errors: yes
+
+  - name: Tell libvirt about our container
+    shell: virt-install --connect lxc:// --noautoconsole --noreboot --name fedora21 --ram 512 --filesystem /var/lib/libvirt/filesystems/fedora21/,/
+    when: "'fedora21' not in virsh_output_prev.stdout"
+
+  - name: Checking to see if our container is registered with libvirt after virt-install
+    shell: virsh list --all | grep fedora21
+    register: virsh_output
+    failed_when: "'fedora21' not in virsh_output.stdout"
+
+  - name: Setting root password to 'fedora' (change this later)
+    shell: echo "root:fedora" | chroot /var/lib/libvirt/filesystems/fedora21/ chpasswd
+
+  - name: Create networking configuration files
+    copy: >
+      src={{ item.src }}
+      dest=/var/lib/libvirt/filesystems/fedora21{{ item.dest }}
+    with_items:
+      - { src: network,    dest: /etc/sysconfig/network }
+      - { src: ifcfg-eth0, dest: /etc/sysconfig/network-scripts/ifcfg-eth0 }
+
+  - name: Enable network on boot
+    shell: chroot /var/lib/libvirt/filesystems/fedora21/ chkconfig network on
+
+  - name: Start the container
+    shell: virsh start fedora21
+
+  - name: Verifying that container is running
+    shell: virsh list --all | grep fedora21
+    register: virsh_output
+    failed_when: "'running' not in virsh_output.stdout"
+
+  - name: Waiting for DHCP...
+    wait_for: >
+      path=/var/lib/libvirt/dnsmasq/default.leases
+      search_regex=ansible-lxc
+
+  - name: Getting IP address
+    shell: cat /var/lib/libvirt/dnsmasq/default.leases | grep ansible-lxc | awk '{print $3}' 
+    register: dhcp_leases
+
+  - name: Your container's IP address
+    debug: var=dhcp_leases.stdout
+

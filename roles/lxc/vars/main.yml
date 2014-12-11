@@ -1,0 +1,16 @@
+---
+
+lxc_packages:
+  - bind-utils
+  - dejavu*
+  - gnome-icon-theme
+  - gnome-themes-standard
+  - libvirt-daemon-config-network
+  - libvirt-daemon-lxc
+  - rsync
+  - sysstat
+  - vim
+  - virt-install
+  - virt-manager
+  - virt-top
+  - xorg-x11-xauth
