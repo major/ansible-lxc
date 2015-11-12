@@ -16,7 +16,7 @@
 #
 
   - name: Upgrade all packages
-    yum: >
+    dnf: >
       name=*
       state=latest
 
@@ -26,7 +26,7 @@
       state=enforcing
 
   - name: Install libvirt/LXC packages
-    yum: >
+    dnf: >
       name={{ item }}
       state=present
     with_items: lxc_packages
@@ -46,7 +46,7 @@
       state=directory
 
   - name: Make Fedora 21 cloud image chroot (may take a while)
-    shell: yum -y --installroot=/var/lib/libvirt/filesystems/fedora21 --releasever=21 install systemd passwd yum fedora-release vim-minimal openssh-server procps-ng iproute net-tools dhclient
+    shell: dnf -y --installroot=/var/lib/libvirt/filesystems/fedora21 --releasever=21 install systemd passwd yum fedora-release vim-minimal openssh-server procps-ng iproute net-tools dhclient
 
   - name: Checking to see if our container is registered from a previous ansible run
     shell: virsh list --all | grep fedora21
